@@ -8,10 +8,8 @@
     "tabGroups",
     "storage",
     "alarms",
-    "commands",
     "offscreen",
-    "scripting",
-    "permissions"
+    "scripting"
   ],
   "optional_host_permissions": [
     "http://*/*",
