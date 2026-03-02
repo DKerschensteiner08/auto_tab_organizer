@@ -3,48 +3,44 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Smart Tab Tidy (AI) - Options</title>
+    <title>Smart Tab Tidy (OpenAI AI) - Options</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
     <main class="container">
-      <h1>Smart Tab Tidy (AI) Settings</h1>
+      <h1>Smart Tab Tidy (OpenAI AI) Settings</h1>
 
       <section class="card">
-        <h2>Similarity</h2>
+        <h2>AI Grouping</h2>
 
-        <label for="similarityMode">Similarity mode</label>
-        <select id="similarityMode">
-          <option value="local">Local similarity (TF-IDF)</option>
-          <option value="embeddings">Embeddings API</option>
-        </select>
+        <label class="toggle">
+          <input id="aiGroupingEnabled" type="checkbox" />
+          <span>Enable AI grouping</span>
+        </label>
+
+        <label for="similarityThreshold">Similarity threshold: <span id="similarityThresholdValue">0.82</span></label>
+        <input id="similarityThreshold" type="range" min="0.50" max="0.98" step="0.01" />
 
         <label class="toggle">
           <input id="includeSnippet" type="checkbox" />
-          <span>Include snippet text (optional)</span>
+          <span>Include snippet text (max 800 chars)</span>
         </label>
+
+        <label for="openaiApiKey">OpenAI API key</label>
+        <input id="openaiApiKey" type="password" placeholder="sk-..." autocomplete="off" />
+
+        <label for="embeddingsModel">Embeddings model</label>
+        <select id="embeddingsModel">
+          <option value="text-embedding-3-small">text-embedding-3-small</option>
+          <option value="text-embedding-3-large">text-embedding-3-large</option>
+        </select>
 
         <label class="toggle">
           <input id="aiLabeling" type="checkbox" />
-          <span>AI labeling (embeddings mode only)</span>
+          <span>Optional AI labeling (Responses API)</span>
         </label>
 
-        <label for="localThreshold">Local threshold: <span id="localThresholdValue">0.35</span></label>
-        <input id="localThreshold" type="range" min="0.05" max="0.95" step="0.01" />
-
-        <label for="embeddingsThreshold">Embeddings threshold: <span id="embeddingsThresholdValue">0.82</span></label>
-        <input id="embeddingsThreshold" type="range" min="0.50" max="0.98" step="0.01" />
-      </section>
-
-      <section class="card" id="embeddingsCard">
-        <h2>Embeddings API</h2>
-        <p class="note warning">Tab titles and selected text may be sent to your chosen AI endpoint.</p>
-
-        <label for="embeddingsEndpoint">Embeddings endpoint URL</label>
-        <input id="embeddingsEndpoint" type="url" placeholder="https://api.example.com/embeddings" />
-
-        <label for="embeddingsApiKey">API key</label>
-        <input id="embeddingsApiKey" type="password" placeholder="Optional bearer token" autocomplete="off" />
+        <p class="note">Tab titles and selected snippet text may be sent to OpenAI when AI grouping is used.</p>
       </section>
 
       <section class="card">
@@ -55,7 +51,7 @@
 
         <label class="toggle">
           <input id="includePinned" type="checkbox" />
-          <span>Include pinned tabs in grouping and AI grouping</span>
+          <span>Include pinned tabs in grouping</span>
         </label>
 
         <label class="toggle">
@@ -72,6 +68,7 @@
 
       <section class="card">
         <h2>Automation</h2>
+
         <label for="autoAiGroupSchedule">Auto AI-group schedule</label>
         <select id="autoAiGroupSchedule">
           <option value="off">Off</option>

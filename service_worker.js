@@ -1,11 +1,12 @@
 const SETTINGS_KEY = "settings";
 const SESSIONS_KEY = "sessions";
-const AUTO_AI_GROUP_ALARM = "smart-tab-tidy-ai-group-schedule";
-const OFFSCREEN_PATH = "offscreen.html";
+const OFFSCREEN_URL = "offscreen.html";
+const AUTO_AI_GROUP_ALARM = "smart-tab-tidy-auto-ai-group";
 const MAX_SESSIONS = 100;
 
 const GROUP_COLORS = ["grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange"];
 const TRACKING_PARAM_EXACT = new Set(["fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid"]);
+const OPTIONAL_SNIPPET_ORIGINS = ["http://*/*", "https://*/*"];
 
 const DEFAULT_SETTINGS = {
   excludedDomains: [],
@@ -13,28 +14,23 @@ const DEFAULT_SETTINGS = {
   includeAudible: false,
   parkingMode: "append",
   defaultRestoreTarget: "new",
-  similarityMode: "local",
+  aiGroupingEnabled: true,
+  similarityThreshold: 0.82,
   includeSnippet: false,
+  openaiApiKey: "",
+  embeddingsModel: "text-embedding-3-small",
   aiLabeling: false,
-  localThreshold: 0.35,
-  embeddingsThreshold: 0.82,
-  embeddingsEndpoint: "",
-  embeddingsApiKey: "",
   autoAiGroupSchedule: "off"
 };
 
 let offscreenCreationPromise = null;
 
 chrome.runtime.onInstalled.addListener(() => {
-  initialize().catch((err) => {
-    console.error("Initialization failed on install:", err);
-  });
+  initialize().catch((err) => console.error("Initialize on install failed:", err));
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  initialize().catch((err) => {
-    console.error("Initialization failed on startup:", err);
-  });
+  initialize().catch((err) => console.error("Initialize on startup failed:", err));
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -43,7 +39,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 
   aiGroupSimilarTabs({ source: "alarm" }).catch((err) => {
-    console.error("Scheduled AI grouping failed:", err);
+    console.error("Auto AI group failed:", err);
   });
 });
 
@@ -66,13 +62,13 @@ chrome.commands.onCommand.addListener((command) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.action === "OFFSCREEN_CLUSTER") {
-    // Offscreen document handles this action.
+  if (message?.type === "EMBED_AND_CLUSTER") {
+    // Offscreen document handles this message type.
     return false;
   }
 
   (async () => {
-    switch (message?.action) {
+    switch (message?.type) {
       case "GROUP_BY_DOMAIN":
         sendResponse({ ok: true, result: await groupByDomain() });
         return;
@@ -85,11 +81,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       case "CLOSE_DUPLICATES":
         sendResponse({ ok: true, result: await closeDuplicates() });
         return;
-      case "AI_GROUP":
+      case "AI_GROUP_OPENAI":
         sendResponse({ ok: true, result: await aiGroupSimilarTabs({ source: "popup" }) });
-        return;
-      case "GET_SESSIONS":
-        sendResponse({ ok: true, result: { sessions: await loadSessions() } });
         return;
       case "GET_SETTINGS":
         sendResponse({ ok: true, result: { settings: await loadSettings() } });
@@ -97,11 +90,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       case "SAVE_SETTINGS":
         sendResponse({ ok: true, result: { settings: await saveSettings(message.settings || {}) } });
         return;
+      case "GET_SESSIONS":
+        sendResponse({ ok: true, result: { sessions: await loadSessions() } });
+        return;
       case "CLEAR_SESSIONS":
-        sendResponse({ ok: true, result: await clearSavedSessions() });
+        sendResponse({ ok: true, result: await clearSessions() });
         return;
       default:
-        sendResponse({ ok: false, error: "Unknown action." });
+        sendResponse({ ok: false, error: "Unknown message type." });
     }
   })().catch((err) => {
     sendResponse({ ok: false, error: toErrorMessage(err) });
@@ -112,6 +108,162 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 function toErrorMessage(err) {
   return err instanceof Error ? err.message : String(err);
+}
+
+function cleanText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeDomainEntry(input) {
+  const raw = cleanText(input).toLowerCase();
+  if (!raw) {
+    return "";
+  }
+
+  return raw
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("/")[0]
+    .split(":")[0]
+    .trim();
+}
+
+function parseUrl(url) {
+  try {
+    return new URL(url);
+  } catch (_err) {
+    return null;
+  }
+}
+
+function getDomain(url) {
+  const parsed = parseUrl(url);
+  if (!parsed || !["http:", "https:"].includes(parsed.protocol)) {
+    return null;
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  return host.startsWith("www.") ? host.slice(4) : host;
+}
+
+function isProcessableTabUrl(url) {
+  const parsed = parseUrl(url);
+  return Boolean(parsed && ["http:", "https:"].includes(parsed.protocol));
+}
+
+function isRestorableUrl(url) {
+  const parsed = parseUrl(url);
+  return Boolean(parsed && ["http:", "https:", "file:"].includes(parsed.protocol));
+}
+
+function isExcludedDomain(domain, excludedDomains) {
+  if (!domain || !excludedDomains.length) {
+    return false;
+  }
+
+  return excludedDomains.some((excluded) => domain === excluded || domain.endsWith(`.${excluded}`));
+}
+
+function clampThreshold(value, fallback) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return fallback;
+  }
+  return Math.max(0.5, Math.min(0.98, num));
+}
+
+function sanitizeSettings(rawSettings = {}) {
+  const merged = { ...DEFAULT_SETTINGS, ...(rawSettings || {}) };
+
+  const excludedDomains = Array.isArray(merged.excludedDomains)
+    ? merged.excludedDomains.map(normalizeDomainEntry).filter(Boolean)
+    : [];
+
+  const parkingMode = ["append", "replace"].includes(merged.parkingMode)
+    ? merged.parkingMode
+    : DEFAULT_SETTINGS.parkingMode;
+
+  const defaultRestoreTarget = ["new", "current"].includes(merged.defaultRestoreTarget)
+    ? merged.defaultRestoreTarget
+    : DEFAULT_SETTINGS.defaultRestoreTarget;
+
+  const embeddingsModel = ["text-embedding-3-small", "text-embedding-3-large"].includes(merged.embeddingsModel)
+    ? merged.embeddingsModel
+    : DEFAULT_SETTINGS.embeddingsModel;
+
+  const autoAiGroupSchedule = ["off", "30m", "2h", "daily"].includes(merged.autoAiGroupSchedule)
+    ? merged.autoAiGroupSchedule
+    : DEFAULT_SETTINGS.autoAiGroupSchedule;
+
+  return {
+    excludedDomains: [...new Set(excludedDomains)],
+    includePinned: Boolean(merged.includePinned),
+    includeAudible: Boolean(merged.includeAudible),
+    parkingMode,
+    defaultRestoreTarget,
+    aiGroupingEnabled: Boolean(merged.aiGroupingEnabled),
+    similarityThreshold: clampThreshold(merged.similarityThreshold, DEFAULT_SETTINGS.similarityThreshold),
+    includeSnippet: Boolean(merged.includeSnippet),
+    openaiApiKey: cleanText(merged.openaiApiKey || ""),
+    embeddingsModel,
+    aiLabeling: Boolean(merged.aiLabeling),
+    autoAiGroupSchedule
+  };
+}
+
+function hashColor(input) {
+  let hash = 0;
+  const str = String(input || "");
+  for (let i = 0; i < str.length; i += 1) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return GROUP_COLORS[hash % GROUP_COLORS.length];
+}
+
+function normalizeUrlForDuplicates(url) {
+  const parsed = parseUrl(url);
+  if (!parsed || !["http:", "https:"].includes(parsed.protocol)) {
+    return null;
+  }
+
+  parsed.hash = "";
+  for (const key of [...parsed.searchParams.keys()]) {
+    const lower = key.toLowerCase();
+    if (lower.startsWith("utm_") || TRACKING_PARAM_EXACT.has(lower)) {
+      parsed.searchParams.delete(key);
+    }
+  }
+
+  parsed.searchParams.sort();
+  const path = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/$/, "");
+  const query = parsed.searchParams.toString();
+  return `${parsed.origin}${path}${query ? `?${query}` : ""}`;
+}
+
+function extractUrlWords(url) {
+  const parsed = parseUrl(url);
+  if (!parsed) {
+    return "";
+  }
+
+  const pathAndQuery = `${parsed.pathname || ""} ${parsed.search || ""}`;
+  return pathAndQuery
+    .replace(/[/?&=_\-.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function scheduleToMinutes(schedule) {
+  switch (schedule) {
+    case "30m":
+      return 30;
+    case "2h":
+      return 120;
+    case "daily":
+      return 1440;
+    default:
+      return null;
+  }
 }
 
 function storageGet(keys) {
@@ -210,14 +362,26 @@ function windowsCreate(props) {
   });
 }
 
-function alarmsClear(name) {
+function runtimeSendMessage(message) {
   return new Promise((resolve, reject) => {
-    chrome.alarms.clear(name, (cleared) => {
+    chrome.runtime.sendMessage(message, (response) => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
         return;
       }
-      resolve(cleared);
+      resolve(response);
+    });
+  });
+}
+
+function executeScript(tabId, files) {
+  return new Promise((resolve, reject) => {
+    chrome.scripting.executeScript({ target: { tabId }, files }, (results) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(results || []);
     });
   });
 }
@@ -234,134 +398,54 @@ function tabsSendMessage(tabId, message) {
   });
 }
 
-function executeScript(tabId, files) {
+function permissionsContains(origins) {
   return new Promise((resolve, reject) => {
-    chrome.scripting.executeScript({ target: { tabId }, files }, (injectionResults) => {
+    chrome.permissions.contains({ origins }, (result) => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
         return;
       }
-      resolve(injectionResults || []);
+      resolve(Boolean(result));
     });
   });
 }
 
-function runtimeSendMessage(message) {
+function permissionsRequest(origins) {
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(message, (response) => {
+    chrome.permissions.request({ origins }, (granted) => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
         return;
       }
-      resolve(response);
+      resolve(Boolean(granted));
     });
   });
-}
-
-function normalizeDomainEntry(input) {
-  const raw = String(input || "").trim().toLowerCase();
-  if (!raw) {
-    return "";
-  }
-
-  return raw
-    .replace(/^https?:\/\//, "")
-    .replace(/^www\./, "")
-    .split("/")[0]
-    .split(":")[0]
-    .trim();
-}
-
-function clampThreshold(value, fallback) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) {
-    return fallback;
-  }
-  return Math.min(0.99, Math.max(0.05, number));
-}
-
-function sanitizeSettings(rawSettings = {}) {
-  const merged = { ...DEFAULT_SETTINGS, ...(rawSettings || {}) };
-
-  const excludedDomains = Array.isArray(merged.excludedDomains)
-    ? merged.excludedDomains.map(normalizeDomainEntry).filter(Boolean)
-    : [];
-
-  const similarityMode = ["local", "embeddings"].includes(merged.similarityMode)
-    ? merged.similarityMode
-    : DEFAULT_SETTINGS.similarityMode;
-
-  const parkingMode = ["append", "replace"].includes(merged.parkingMode)
-    ? merged.parkingMode
-    : DEFAULT_SETTINGS.parkingMode;
-
-  const defaultRestoreTarget = ["new", "current"].includes(merged.defaultRestoreTarget)
-    ? merged.defaultRestoreTarget
-    : DEFAULT_SETTINGS.defaultRestoreTarget;
-
-  const autoAiGroupSchedule = ["off", "30m", "2h", "daily"].includes(merged.autoAiGroupSchedule)
-    ? merged.autoAiGroupSchedule
-    : DEFAULT_SETTINGS.autoAiGroupSchedule;
-
-  const embeddingsEndpoint = String(merged.embeddingsEndpoint || "").trim();
-
-  return {
-    excludedDomains: [...new Set(excludedDomains)],
-    includePinned: Boolean(merged.includePinned),
-    includeAudible: Boolean(merged.includeAudible),
-    parkingMode,
-    defaultRestoreTarget,
-    similarityMode,
-    includeSnippet: Boolean(merged.includeSnippet),
-    aiLabeling: Boolean(merged.aiLabeling),
-    localThreshold: clampThreshold(merged.localThreshold, DEFAULT_SETTINGS.localThreshold),
-    embeddingsThreshold: clampThreshold(merged.embeddingsThreshold, DEFAULT_SETTINGS.embeddingsThreshold),
-    embeddingsEndpoint,
-    embeddingsApiKey: String(merged.embeddingsApiKey || ""),
-    autoAiGroupSchedule
-  };
 }
 
 async function loadSettings() {
-  const result = await storageGet(SETTINGS_KEY);
-  return sanitizeSettings(result[SETTINGS_KEY]);
+  const data = await storageGet(SETTINGS_KEY);
+  return sanitizeSettings(data[SETTINGS_KEY]);
 }
 
 async function saveSettings(rawSettings) {
   const settings = sanitizeSettings(rawSettings);
-  if (settings.similarityMode === "embeddings" && settings.embeddingsEndpoint) {
-    ensureValidEndpoint(settings.embeddingsEndpoint);
-  }
-
   await storageSet({ [SETTINGS_KEY]: settings });
-  await syncAutoGroupAlarm(settings);
+  await syncAutoAiAlarm(settings);
   return settings;
 }
 
 async function loadSessions() {
-  const result = await storageGet(SESSIONS_KEY);
-  return Array.isArray(result[SESSIONS_KEY]) ? result[SESSIONS_KEY] : [];
+  const data = await storageGet(SESSIONS_KEY);
+  return Array.isArray(data[SESSIONS_KEY]) ? data[SESSIONS_KEY] : [];
 }
 
 async function saveSessions(sessions) {
   await storageSet({ [SESSIONS_KEY]: sessions.slice(0, MAX_SESSIONS) });
 }
 
-function scheduleToMinutes(schedule) {
-  switch (schedule) {
-    case "30m":
-      return 30;
-    case "2h":
-      return 120;
-    case "daily":
-      return 1440;
-    default:
-      return null;
-  }
-}
+async function syncAutoAiAlarm(settings) {
+  await new Promise((resolve) => chrome.alarms.clear(AUTO_AI_GROUP_ALARM, () => resolve()));
 
-async function syncAutoGroupAlarm(settings) {
-  await alarmsClear(AUTO_AI_GROUP_ALARM);
   const minutes = scheduleToMinutes(settings.autoAiGroupSchedule);
   if (!minutes) {
     return;
@@ -373,129 +457,6 @@ async function syncAutoGroupAlarm(settings) {
   });
 }
 
-function parseUrl(url) {
-  try {
-    return new URL(url);
-  } catch (_err) {
-    return null;
-  }
-}
-
-function isProcessableTabUrl(url) {
-  const parsed = parseUrl(url);
-  if (!parsed) {
-    return false;
-  }
-
-  const protocol = parsed.protocol;
-  return protocol === "http:" || protocol === "https:";
-}
-
-function isRestorableUrl(url) {
-  const parsed = parseUrl(url);
-  if (!parsed) {
-    return false;
-  }
-
-  return ["http:", "https:", "file:"].includes(parsed.protocol);
-}
-
-function getDomain(url) {
-  const parsed = parseUrl(url);
-  if (!parsed || !["http:", "https:"].includes(parsed.protocol)) {
-    return null;
-  }
-
-  const host = parsed.hostname.toLowerCase();
-  return host.startsWith("www.") ? host.slice(4) : host;
-}
-
-function extractUrlWords(url) {
-  const parsed = parseUrl(url);
-  if (!parsed) {
-    return "";
-  }
-
-  const pathAndQuery = `${parsed.pathname || ""} ${parsed.search || ""}`;
-  return pathAndQuery
-    .replace(/[/?&=_\-.]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function normalizeText(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
-
-function isExcludedDomain(domain, excludedDomains) {
-  if (!domain || !excludedDomains.length) {
-    return false;
-  }
-
-  return excludedDomains.some((excluded) => domain === excluded || domain.endsWith(`.${excluded}`));
-}
-
-function hashColor(input) {
-  let hash = 0;
-  const value = String(input || "");
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
-  }
-  return GROUP_COLORS[hash % GROUP_COLORS.length];
-}
-
-function normalizeUrlForDuplicates(url) {
-  const parsed = parseUrl(url);
-  if (!parsed || !["http:", "https:"].includes(parsed.protocol)) {
-    return null;
-  }
-
-  parsed.hash = "";
-
-  for (const key of [...parsed.searchParams.keys()]) {
-    const lower = key.toLowerCase();
-    if (lower.startsWith("utm_") || TRACKING_PARAM_EXACT.has(lower)) {
-      parsed.searchParams.delete(key);
-    }
-  }
-
-  parsed.searchParams.sort();
-  const pathname = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/$/, "");
-  const query = parsed.searchParams.toString();
-  return `${parsed.origin}${pathname}${query ? `?${query}` : ""}`;
-}
-
-function generateSessionId(parkingMode) {
-  if (parkingMode === "replace") {
-    return "parking-lot";
-  }
-
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-
-  return `session-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-}
-
-function getParkingName(parkingMode) {
-  if (parkingMode === "replace") {
-    return "Parking Lot";
-  }
-  return `Parking Lot (${new Date().toLocaleString()})`;
-}
-
-function ensureValidEndpoint(endpoint) {
-  const parsed = parseUrl(endpoint);
-  if (!parsed) {
-    throw new Error("Embeddings endpoint must be a valid URL.");
-  }
-
-  const isLocal = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
-  if (parsed.protocol !== "https:" && !isLocal) {
-    throw new Error("Embeddings endpoint must be https:// unless using localhost.");
-  }
-}
-
 async function initialize() {
   const settings = await loadSettings();
   await storageSet({ [SETTINGS_KEY]: settings });
@@ -503,14 +464,14 @@ async function initialize() {
   const sessions = await loadSessions();
   await storageSet({ [SESSIONS_KEY]: Array.isArray(sessions) ? sessions : [] });
 
-  await syncAutoGroupAlarm(settings);
+  await syncAutoAiAlarm(settings);
 }
 
 async function groupByDomain() {
   const settings = await loadSettings();
   const tabs = await tabsQuery({ currentWindow: true });
 
-  const groupsByDomain = new Map();
+  const byDomain = new Map();
 
   for (const tab of tabs) {
     if (!tab.id || !tab.url) {
@@ -528,35 +489,55 @@ async function groupByDomain() {
       continue;
     }
 
-    if (!groupsByDomain.has(domain)) {
-      groupsByDomain.set(domain, []);
+    if (!byDomain.has(domain)) {
+      byDomain.set(domain, []);
     }
-    groupsByDomain.get(domain).push(tab.id);
+    byDomain.get(domain).push(tab.id);
   }
 
-  const domains = [...groupsByDomain.keys()].sort();
+  const domains = [...byDomain.keys()].sort();
   let tabsGrouped = 0;
 
   for (const domain of domains) {
-    const ids = groupsByDomain.get(domain);
-    if (!ids || !ids.length) {
+    const tabIds = byDomain.get(domain);
+    if (!tabIds || !tabIds.length) {
       continue;
     }
 
-    const groupId = await tabsGroup({ tabIds: ids });
+    const groupId = await tabsGroup({ tabIds });
     await tabGroupsUpdate(groupId, {
       title: domain,
       color: hashColor(domain),
       collapsed: false
     });
 
-    tabsGrouped += ids.length;
+    tabsGrouped += tabIds.length;
   }
 
   return {
     domainsGrouped: domains.length,
     tabsGrouped
   };
+}
+
+function generateSessionId(parkingMode) {
+  if (parkingMode === "replace") {
+    return "parking-lot";
+  }
+
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `session-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+}
+
+function makeParkingName(parkingMode) {
+  if (parkingMode === "replace") {
+    return "Parking Lot";
+  }
+
+  return `Parking Lot (${new Date().toLocaleString()})`;
 }
 
 async function parkTabs() {
@@ -577,12 +558,12 @@ async function parkTabs() {
   });
 
   if (!candidates.length) {
-    return { parkedCount: 0, sessionId: null, sessionName: null };
+    return { parkedCount: 0, sessionName: null, sessionId: null };
   }
 
   const session = {
     id: generateSessionId(settings.parkingMode),
-    name: getParkingName(settings.parkingMode),
+    name: makeParkingName(settings.parkingMode),
     createdAt: new Date().toISOString(),
     windowId: candidates[0].windowId ?? null,
     tabs: candidates.map((tab) => ({
@@ -593,17 +574,17 @@ async function parkTabs() {
   };
 
   const existing = await loadSessions();
-  const nextSessions = settings.parkingMode === "replace"
+  const next = settings.parkingMode === "replace"
     ? [session, ...existing.filter((s) => s.id !== "parking-lot")]
     : [session, ...existing];
 
-  await saveSessions(nextSessions);
+  await saveSessions(next);
   await tabsRemove(candidates.map((tab) => tab.id));
 
   return {
     parkedCount: candidates.length,
-    sessionId: session.id,
-    sessionName: session.name
+    sessionName: session.name,
+    sessionId: session.id
   };
 }
 
@@ -614,7 +595,7 @@ async function restoreSession(sessionId, target = "new") {
     throw new Error("Selected session was not found.");
   }
 
-  const urls = (session.tabs || []).map((tab) => tab.url).filter(isRestorableUrl);
+  const urls = (session.tabs || []).map((t) => t.url).filter(isRestorableUrl);
   if (!urls.length) {
     throw new Error("Session has no restorable tab URLs.");
   }
@@ -622,7 +603,6 @@ async function restoreSession(sessionId, target = "new") {
   if (target === "new") {
     const createdWindow = await windowsCreate({ url: urls[0] });
     const windowId = createdWindow.id;
-
     for (let i = 1; i < urls.length; i += 1) {
       await tabsCreate({ windowId, url: urls[i], active: false });
     }
@@ -667,23 +647,23 @@ async function closeDuplicates() {
   let duplicateSets = 0;
   const closeIds = [];
 
-  for (const sameUrlTabs of groups.values()) {
-    if (sameUrlTabs.length < 2) {
+  for (const same of groups.values()) {
+    if (same.length < 2) {
       continue;
     }
 
     duplicateSets += 1;
 
-    const active = sameUrlTabs.find((tab) => tab.active);
-    const keeper = active || sameUrlTabs.slice().sort((a, b) => {
+    const active = same.find((t) => t.active);
+    const keeper = active || same.slice().sort((a, b) => {
       const ai = typeof a.index === "number" ? a.index : Number.MAX_SAFE_INTEGER;
       const bi = typeof b.index === "number" ? b.index : Number.MAX_SAFE_INTEGER;
       return ai - bi;
     })[0];
 
-    for (const tab of sameUrlTabs) {
-      if (tab.id !== keeper.id) {
-        closeIds.push(tab.id);
+    for (const t of same) {
+      if (t.id !== keeper.id) {
+        closeIds.push(t.id);
       }
     }
   }
@@ -698,7 +678,7 @@ async function closeDuplicates() {
   };
 }
 
-async function clearSavedSessions() {
+async function clearSessions() {
   await saveSessions([]);
   return { cleared: true };
 }
@@ -710,7 +690,7 @@ async function hasOffscreenDocument() {
 
   const contexts = await chrome.runtime.getContexts({
     contextTypes: ["OFFSCREEN_DOCUMENT"],
-    documentUrls: [chrome.runtime.getURL(OFFSCREEN_PATH)]
+    documentUrls: [chrome.runtime.getURL(OFFSCREEN_URL)]
   });
 
   return contexts.length > 0;
@@ -727,9 +707,9 @@ async function ensureOffscreenDocument() {
   }
 
   offscreenCreationPromise = chrome.offscreen.createDocument({
-    url: OFFSCREEN_PATH,
+    url: OFFSCREEN_URL,
     reasons: [chrome.offscreen.Reason.DOM_PARSER],
-    justification: "Compute semantic clustering and call embeddings endpoint."
+    justification: "Run embedding requests and clustering without blocking service worker lifecycle."
   });
 
   try {
@@ -744,39 +724,33 @@ async function ensureOffscreenDocument() {
   }
 }
 
-async function closeOffscreenDocument() {
-  try {
-    if (await hasOffscreenDocument()) {
-      await chrome.offscreen.closeDocument();
-    }
-  } catch (_err) {
-    // No-op: if close fails, extension can still proceed.
+function withTimeout(promise, ms, fallback) {
+  let timerId;
+  const timer = new Promise((resolve) => {
+    timerId = setTimeout(() => resolve(fallback), ms);
+  });
+
+  return Promise.race([promise, timer]).finally(() => clearTimeout(timerId));
+}
+
+async function canUseSnippets() {
+  const hasOrigins = await permissionsContains(OPTIONAL_SNIPPET_ORIGINS);
+  if (hasOrigins) {
+    return true;
   }
+
+  // Request optional site permission only when snippet mode is explicitly enabled by the user.
+  return permissionsRequest(OPTIONAL_SNIPPET_ORIGINS);
 }
 
-function withTimeout(promise, ms, fallbackValue) {
-  let timeoutId;
-  const timeout = new Promise((resolve) => {
-    timeoutId = setTimeout(() => resolve(fallbackValue), ms);
-  });
-
-  return Promise.race([promise, timeout]).finally(() => {
-    clearTimeout(timeoutId);
-  });
-}
-
-async function extractSnippetForTab(tabId) {
+async function extractSnippet(tabId) {
   try {
-    const directResponse = await withTimeout(
-      tabsSendMessage(tabId, { action: "GET_SNIPPET" }),
-      700,
-      { ok: false, snippet: "" }
-    );
-    if (directResponse?.ok && directResponse.snippet) {
-      return normalizeText(directResponse.snippet).slice(0, 800);
+    const existing = await withTimeout(tabsSendMessage(tabId, { type: "GET_SNIPPET" }), 700, null);
+    if (existing?.ok && existing.snippet) {
+      return cleanText(existing.snippet).slice(0, 800);
     }
   } catch (_err) {
-    // Inject content script if not already present.
+    // Content script is likely not injected yet.
   }
 
   try {
@@ -785,45 +759,56 @@ async function extractSnippetForTab(tabId) {
     return "";
   }
 
-  const response = await withTimeout(tabsSendMessage(tabId, { action: "GET_SNIPPET" }), 1200, {
-    ok: false,
-    snippet: ""
-  });
-
+  const response = await withTimeout(tabsSendMessage(tabId, { type: "GET_SNIPPET" }), 1200, null);
   if (!response?.ok || !response.snippet) {
     return "";
   }
 
-  return normalizeText(response.snippet).slice(0, 800);
+  return cleanText(response.snippet).slice(0, 800);
 }
 
-async function buildAiDocuments(tabs, settings) {
+async function buildDocuments(tabs, settings) {
   const warnings = [];
-  const documents = [];
+  const snippets = [];
 
-  const snippetPromises = settings.includeSnippet
-    ? tabs.map((tab) => extractSnippetForTab(tab.id))
-    : tabs.map(() => Promise.resolve(""));
+  if (settings.includeSnippet) {
+    const snippetAllowed = await canUseSnippets();
+    if (!snippetAllowed) {
+      warnings.push("Snippet permission denied. Continuing without snippets.");
+    }
 
-  const snippets = await Promise.all(snippetPromises);
+    for (const tab of tabs) {
+      if (!snippetAllowed) {
+        snippets.push("");
+        continue;
+      }
 
+      const snippet = await extractSnippet(tab.id);
+      snippets.push(snippet);
+      if (!snippet) {
+        warnings.push(`No snippet for: ${(tab.title || "Untitled").slice(0, 40)}`);
+      }
+    }
+  } else {
+    for (let i = 0; i < tabs.length; i += 1) {
+      snippets.push("");
+    }
+  }
+
+  const docs = [];
   for (let i = 0; i < tabs.length; i += 1) {
     const tab = tabs[i];
     const domain = getDomain(tab.url) || "";
-    const title = normalizeText(tab.title || "Untitled tab");
+    const title = cleanText(tab.title || "Untitled tab");
     const urlWords = extractUrlWords(tab.url);
-    const snippet = settings.includeSnippet ? normalizeText(snippets[i] || "") : "";
+    const snippet = cleanText(snippets[i] || "").slice(0, 800);
 
-    if (settings.includeSnippet && !snippet) {
-      warnings.push(`Snippet unavailable for tab: ${title.slice(0, 40)}`);
-    }
-
-    const text = normalizeText(`${title}\n${domain}\n${urlWords}\n${snippet}`);
+    const text = cleanText(`${title}\n${domain}\n${urlWords}\n${snippet}`);
     if (!text) {
       continue;
     }
 
-    documents.push({
+    docs.push({
       tabId: tab.id,
       title,
       domain,
@@ -831,18 +816,27 @@ async function buildAiDocuments(tabs, settings) {
     });
   }
 
-  return { documents, warnings };
+  return { docs, warnings };
 }
 
 async function aiGroupSimilarTabs({ source = "popup" } = {}) {
   const settings = await loadSettings();
 
-  if (settings.similarityMode === "embeddings") {
-    if (!settings.embeddingsEndpoint) {
-      throw new Error("Embeddings mode is enabled but endpoint URL is empty.");
-    }
-    ensureValidEndpoint(settings.embeddingsEndpoint);
+  if (!settings.aiGroupingEnabled) {
+    throw new Error("AI grouping is disabled in Options.");
   }
+
+  if (!settings.openaiApiKey) {
+    throw new Error("OpenAI API key is missing. Add it in Options.");
+  }
+
+  const tabs = await tabsQuery({ currentWindow: true });
+  const candidates = tabs
+    .filter((tab) => tab.id && tab.url)
+    .filter((tab) => (settings.includePinned ? true : !tab.pinned))
+    .filter((tab) => !tab.discarded)
+    .filter((tab) => isProcessableTabUrl(tab.url))
+    .filter((tab) => !isExcludedDomain(getDomain(tab.url), settings.excludedDomains));
 
   if (source === "alarm") {
     const activeTabs = await tabsQuery({ active: true, lastFocusedWindow: true });
@@ -851,117 +845,97 @@ async function aiGroupSimilarTabs({ source = "popup" } = {}) {
       return {
         groupsCreated: 0,
         tabsGrouped: 0,
-        clustersSkipped: 0,
-        warnings: ["Skipped by schedule because active tab domain is excluded."],
+        skipped: candidates.length,
+        warnings: ["Skipped scheduled run: active domain is excluded."],
         errors: []
       };
     }
   }
 
-  const windowTabs = await tabsQuery({ currentWindow: true });
-  const candidates = windowTabs
-    .filter((tab) => tab.id && tab.url)
-    .filter((tab) => (settings.includePinned ? true : !tab.pinned))
-    .filter((tab) => !tab.discarded)
-    .filter((tab) => isProcessableTabUrl(tab.url))
-    .filter((tab) => {
-      const domain = getDomain(tab.url);
-      return !isExcludedDomain(domain, settings.excludedDomains);
-    });
-
   if (candidates.length < 2) {
     return {
       groupsCreated: 0,
       tabsGrouped: 0,
-      clustersSkipped: candidates.length,
-      warnings: ["Not enough candidate tabs for semantic grouping."],
+      skipped: candidates.length,
+      warnings: ["Not enough eligible tabs."],
       errors: []
     };
   }
 
-  const { documents, warnings: docWarnings } = await buildAiDocuments(candidates, settings);
-  if (documents.length < 2) {
+  const { docs, warnings: docWarnings } = await buildDocuments(candidates, settings);
+  if (docs.length < 2) {
     return {
       groupsCreated: 0,
       tabsGrouped: 0,
-      clustersSkipped: candidates.length,
-      warnings: ["Could not build enough tab text documents.", ...docWarnings],
+      skipped: candidates.length,
+      warnings: ["Could not build enough tab documents.", ...docWarnings],
       errors: []
     };
   }
 
-  let offscreenResponse;
   await ensureOffscreenDocument();
-  try {
-    offscreenResponse = await runtimeSendMessage({
-      action: "OFFSCREEN_CLUSTER",
-      payload: {
-        documents,
-        settings: {
-          similarityMode: settings.similarityMode,
-          localThreshold: settings.localThreshold,
-          embeddingsThreshold: settings.embeddingsThreshold,
-          embeddingsEndpoint: settings.embeddingsEndpoint,
-          embeddingsApiKey: settings.embeddingsApiKey,
-          aiLabeling: settings.aiLabeling
-        }
-      }
-    });
-  } finally {
-    await closeOffscreenDocument();
-  }
+  const offscreenResponse = await runtimeSendMessage({
+    type: "EMBED_AND_CLUSTER",
+    payload: {
+      docs,
+      threshold: settings.similarityThreshold,
+      model: settings.embeddingsModel,
+      apiKey: settings.openaiApiKey,
+      aiLabeling: settings.aiLabeling
+    }
+  });
 
   if (!offscreenResponse?.ok) {
     throw new Error(offscreenResponse?.error || "Offscreen clustering failed.");
   }
 
-  const rawClusters = Array.isArray(offscreenResponse.result?.clusters) ? offscreenResponse.result.clusters : [];
-  const offscreenWarnings = Array.isArray(offscreenResponse.result?.warnings) ? offscreenResponse.result.warnings : [];
+  const clusters = Array.isArray(offscreenResponse.result?.clusters) ? offscreenResponse.result.clusters : [];
+  const warnings = [...docWarnings, ...(offscreenResponse.result?.warnings || [])];
+  const errors = [...(offscreenResponse.result?.errors || [])];
 
-  const tabInfo = new Map(candidates.map((tab) => [tab.id, tab]));
-  const sortedClusters = rawClusters
+  const tabIndexById = new Map(candidates.map((tab) => [tab.id, tab.index ?? 99999]));
+
+  const sortedClusters = clusters
     .map((cluster) => ({
-      tabIds: Array.isArray(cluster.tabIds) ? cluster.tabIds.filter((id) => tabInfo.has(id)) : [],
-      label: normalizeText(cluster.label || "Similar Tabs").slice(0, 60)
+      tabIds: [...new Set(Array.isArray(cluster.tabIds) ? cluster.tabIds : [])].filter((id) => tabIndexById.has(id)),
+      label: cleanText(cluster.label || "Similar Tabs").slice(0, 60) || "Similar Tabs"
     }))
     .filter((cluster) => cluster.tabIds.length > 0)
     .sort((a, b) => {
-      const minA = Math.min(...a.tabIds.map((id) => tabInfo.get(id)?.index ?? 99999));
-      const minB = Math.min(...b.tabIds.map((id) => tabInfo.get(id)?.index ?? 99999));
+      const minA = Math.min(...a.tabIds.map((id) => tabIndexById.get(id) ?? 99999));
+      const minB = Math.min(...b.tabIds.map((id) => tabIndexById.get(id) ?? 99999));
       return minA - minB;
     });
 
   let groupsCreated = 0;
   let tabsGrouped = 0;
-  let clustersSkipped = 0;
-  const errors = [];
+  let skipped = 0;
 
   for (const cluster of sortedClusters) {
-    const uniqueIds = [...new Set(cluster.tabIds)].filter((id) => tabInfo.has(id));
-    if (uniqueIds.length < 2) {
-      clustersSkipped += 1;
+    if (cluster.tabIds.length < 2) {
+      skipped += 1;
       continue;
     }
 
     try {
-      const groupId = await tabsGroup({ tabIds: uniqueIds });
+      const groupId = await tabsGroup({ tabIds: cluster.tabIds });
       await tabGroupsUpdate(groupId, {
-        title: cluster.label || "Similar Tabs",
-        color: hashColor(cluster.label || String(uniqueIds[0])),
+        title: cluster.label,
+        color: hashColor(cluster.label),
         collapsed: false
       });
       groupsCreated += 1;
-      tabsGrouped += uniqueIds.length;
+      tabsGrouped += cluster.tabIds.length;
     } catch (err) {
-      errors.push(`Failed to group cluster (${(cluster.label || "unnamed").slice(0, 30)}): ${toErrorMessage(err)}`);
+      errors.push(`Failed to group '${cluster.label}': ${toErrorMessage(err)}`);
     }
   }
 
   return {
     groupsCreated,
     tabsGrouped,
-    clustersSkipped,
-    warnings: [...docWarnings, ...offscreenWarnings],
+    skipped,
+    warnings,
     errors
   };
 }

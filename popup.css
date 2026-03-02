@@ -5,9 +5,9 @@
 
 body {
   margin: 0;
-  min-width: 330px;
+  min-width: 336px;
   background: #f5f7fb;
-  color: #1a2438;
+  color: #1d2638;
 }
 
 .popup {
@@ -19,26 +19,21 @@ body {
 h1 {
   margin: 0 0 4px;
   font-size: 16px;
-  font-weight: 700;
 }
 
 button,
 select {
-  border: 1px solid #c9d1e2;
+  border: 1px solid #cbd3e3;
   border-radius: 8px;
-  background: #fff;
-  color: #1a2438;
   padding: 9px 10px;
+  background: #fff;
+  color: #1d2638;
   font-size: 13px;
 }
 
 button {
   cursor: pointer;
   font-weight: 600;
-}
-
-button:hover {
-  border-color: #9aa8c3;
 }
 
 button.primary {
@@ -51,10 +46,10 @@ button.secondary {
   background: #eef2f8;
 }
 
-.restore-block {
+.restore {
   display: grid;
   gap: 6px;
-  border: 1px solid #d8deeb;
+  border: 1px solid #d5dcec;
   border-radius: 8px;
   background: #fff;
   padding: 8px;
@@ -62,14 +57,14 @@ button.secondary {
 
 label {
   font-size: 12px;
-  color: #465874;
+  color: #4c5c78;
 }
 
 .status {
-  min-height: 24px;
   margin: 2px 0 0;
-  font-size: 12px;
+  min-height: 28px;
   white-space: pre-wrap;
+  font-size: 12px;
 }
 
 .status.success {

@@ -1,18 +1,17 @@
 (() => {
   const MAX_SNIPPET = 800;
 
-  function cleanText(value) {
-    return String(value || "").replace(/\s+/g, " ").trim();
+  function cleanText(text) {
+    return String(text || "").replace(/\s+/g, " ").trim();
   }
 
-  function getMetaDescription() {
-    const meta = document.querySelector('meta[name="description"], meta[property="og:description"]');
-    return cleanText(meta?.content || "");
+  function fromMetaDescription() {
+    const node = document.querySelector('meta[name="description"], meta[property="og:description"]');
+    return cleanText(node?.content || "");
   }
 
-  function getBodySnippet() {
+  function fromVisibleText() {
     const selectors = ["main", "article", "section", "p", "div"];
-
     for (const selector of selectors) {
       const nodes = document.querySelectorAll(selector);
       for (const node of nodes) {
@@ -22,22 +21,15 @@
         }
       }
     }
-
     return cleanText(document.body?.innerText || "");
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.action !== "GET_SNIPPET") {
+    if (message?.type !== "GET_SNIPPET") {
       return;
     }
 
-    const meta = getMetaDescription();
-    const fallback = getBodySnippet();
-    const chosen = meta || fallback;
-
-    sendResponse({
-      ok: true,
-      snippet: chosen.slice(0, MAX_SNIPPET)
-    });
+    const snippet = (fromMetaDescription() || fromVisibleText()).slice(0, MAX_SNIPPET);
+    sendResponse({ ok: true, snippet });
   });
 })();

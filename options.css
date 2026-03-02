@@ -6,11 +6,11 @@
 body {
   margin: 0;
   background: #f4f6fb;
-  color: #1a2438;
+  color: #1b2438;
 }
 
 .container {
-  max-width: 840px;
+  max-width: 860px;
   margin: 0 auto;
   padding: 18px 16px 28px;
   display: grid;
@@ -28,35 +28,30 @@ h2 {
 }
 
 .card {
-  background: #fff;
-  border: 1px solid #d6deee;
-  border-radius: 10px;
-  padding: 14px;
   display: grid;
   gap: 10px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #d5deef;
+  border-radius: 10px;
 }
 
 label {
   font-size: 14px;
   font-weight: 600;
-  color: #334662;
+  color: #33455f;
 }
 
 input,
 textarea,
 select,
 button {
-  border: 1px solid #c4cee2;
+  border: 1px solid #c6d0e4;
   border-radius: 8px;
-  font-size: 14px;
   padding: 9px 10px;
-}
-
-input,
-textarea,
-select {
+  font-size: 14px;
   background: #fff;
-  color: #1a2438;
+  color: #1b2438;
 }
 
 .toggle {
@@ -74,11 +69,7 @@ select {
 .note {
   margin: 0;
   font-size: 13px;
-  color: #4b5d7d;
-}
-
-.note.warning {
-  color: #9a2b2b;
+  color: #ab2a2a;
 }
 
 .actions {
@@ -89,7 +80,6 @@ select {
 button {
   cursor: pointer;
   font-weight: 700;
-  background: #f8fbff;
 }
 
 button.primary {
@@ -100,7 +90,7 @@ button.primary {
 
 button.danger {
   background: #fff2f2;
-  border-color: #e19191;
+  border-color: #e39797;
   color: #992626;
 }
 

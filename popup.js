@@ -1,16 +1,16 @@
 const statusEl = document.getElementById("status");
 const sessionsSelect = document.getElementById("sessionsSelect");
-const restoreTargetEl = document.getElementById("restoreTarget");
 const restoreBtn = document.getElementById("restoreBtn");
+const restoreTargetEl = document.getElementById("restoreTarget");
 
 function setStatus(message, kind = "") {
   statusEl.textContent = message;
   statusEl.className = `status ${kind}`.trim();
 }
 
-function sendMessage(action, payload = {}) {
+function sendMessage(type, payload = {}) {
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ action, ...payload }, (response) => {
+    chrome.runtime.sendMessage({ type, ...payload }, (response) => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
         return;
@@ -24,21 +24,21 @@ function sendMessage(action, payload = {}) {
   });
 }
 
-function formatSessionOption(session) {
-  const date = session.createdAt ? new Date(session.createdAt).toLocaleString() : "Unknown";
+function formatSession(session) {
+  const created = session.createdAt ? new Date(session.createdAt).toLocaleString() : "Unknown";
   const count = Array.isArray(session.tabs) ? session.tabs.length : 0;
-  return `${session.name} • ${count} tabs • ${date}`;
+  return `${session.name} • ${count} tabs • ${created}`;
 }
 
 function formatAiSummary(result) {
-  const warnings = Array.isArray(result.warnings) ? result.warnings : [];
-  const errors = Array.isArray(result.errors) ? result.errors : [];
-
   const lines = [
     `Groups created: ${result.groupsCreated || 0}`,
     `Tabs grouped: ${result.tabsGrouped || 0}`,
-    `Clusters skipped: ${result.clustersSkipped || 0}`
+    `Skipped clusters: ${result.skipped || 0}`
   ];
+
+  const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+  const errors = Array.isArray(result.errors) ? result.errors : [];
 
   if (warnings.length) {
     lines.push(`Warnings: ${warnings.slice(0, 2).join(" | ")}`);
@@ -55,10 +55,10 @@ async function loadSessions() {
   sessionsSelect.innerHTML = "";
 
   if (!sessions.length) {
-    const empty = document.createElement("option");
-    empty.value = "";
-    empty.textContent = "No saved sessions";
-    sessionsSelect.appendChild(empty);
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No saved sessions";
+    sessionsSelect.appendChild(option);
     sessionsSelect.disabled = true;
     restoreBtn.disabled = true;
     return;
@@ -67,7 +67,7 @@ async function loadSessions() {
   for (const session of sessions) {
     const option = document.createElement("option");
     option.value = session.id;
-    option.textContent = formatSessionOption(session);
+    option.textContent = formatSession(session);
     sessionsSelect.appendChild(option);
   }
 
@@ -82,8 +82,8 @@ async function loadSettings() {
 
 async function onAiGroup() {
   try {
-    setStatus("AI grouping similar tabs...");
-    const result = await sendMessage("AI_GROUP");
+    setStatus("Grouping similar tabs with OpenAI...");
+    const result = await sendMessage("AI_GROUP_OPENAI");
     setStatus(formatAiSummary(result), "success");
   } catch (err) {
     setStatus(err.message, "error");
@@ -109,7 +109,7 @@ async function onParkTabs() {
       return;
     }
 
-    setStatus(`Parked ${result.parkedCount} tabs to ${result.sessionName}.`, "success");
+    setStatus(`Parked ${result.parkedCount} tabs into ${result.sessionName}.`, "success");
     await loadSessions();
   } catch (err) {
     setStatus(err.message, "error");
@@ -117,16 +117,15 @@ async function onParkTabs() {
 }
 
 async function onRestore() {
-  const sessionId = sessionsSelect.value;
-  if (!sessionId) {
-    setStatus("Select a saved session first.", "error");
+  if (!sessionsSelect.value) {
+    setStatus("Choose a saved session first.", "error");
     return;
   }
 
   try {
     setStatus("Restoring session...");
     const result = await sendMessage("RESTORE_SESSION", {
-      sessionId,
+      sessionId: sessionsSelect.value,
       target: restoreTargetEl.value
     });
     setStatus(`Restored ${result.restoredCount} tabs from ${result.sessionName}.`, "success");
@@ -139,10 +138,7 @@ async function onCloseDuplicates() {
   try {
     setStatus("Closing duplicate tabs...");
     const result = await sendMessage("CLOSE_DUPLICATES");
-    setStatus(
-      `Closed ${result.closedCount} duplicates across ${result.duplicateSets} duplicate URL sets.`,
-      "success"
-    );
+    setStatus(`Closed ${result.closedCount} tabs from ${result.duplicateSets} duplicate sets.`, "success");
   } catch (err) {
     setStatus(err.message, "error");
   }

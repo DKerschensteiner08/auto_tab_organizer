@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Smart Tab Tidy (AI)",
-  "description": "Organize tabs by domain and semantic similarity, park sessions, restore tabs, and close duplicates.",
-  "version": "2.0.0",
+  "name": "Smart Tab Tidy (OpenAI AI)",
+  "description": "Group tabs by domain and OpenAI semantic similarity, park sessions, restore tabs, and close duplicates.",
+  "version": "3.0.0",
   "permissions": [
     "tabs",
     "tabGroups",
@@ -10,9 +10,10 @@
     "alarms",
     "commands",
     "offscreen",
-    "scripting"
+    "scripting",
+    "permissions"
   ],
-  "host_permissions": [
+  "optional_host_permissions": [
     "http://*/*",
     "https://*/*"
   ],
@@ -21,7 +22,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Smart Tab Tidy (AI)",
+    "default_title": "Smart Tab Tidy (OpenAI AI)",
     "default_popup": "popup.html"
   },
   "options_page": "options.html",

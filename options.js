@@ -1,20 +1,17 @@
 const els = {
-  similarityMode: document.getElementById("similarityMode"),
+  aiGroupingEnabled: document.getElementById("aiGroupingEnabled"),
+  similarityThreshold: document.getElementById("similarityThreshold"),
+  similarityThresholdValue: document.getElementById("similarityThresholdValue"),
   includeSnippet: document.getElementById("includeSnippet"),
+  openaiApiKey: document.getElementById("openaiApiKey"),
+  embeddingsModel: document.getElementById("embeddingsModel"),
   aiLabeling: document.getElementById("aiLabeling"),
-  localThreshold: document.getElementById("localThreshold"),
-  localThresholdValue: document.getElementById("localThresholdValue"),
-  embeddingsThreshold: document.getElementById("embeddingsThreshold"),
-  embeddingsThresholdValue: document.getElementById("embeddingsThresholdValue"),
-  embeddingsEndpoint: document.getElementById("embeddingsEndpoint"),
-  embeddingsApiKey: document.getElementById("embeddingsApiKey"),
   excludedDomains: document.getElementById("excludedDomains"),
   includePinned: document.getElementById("includePinned"),
   includeAudible: document.getElementById("includeAudible"),
   parkingMode: document.getElementById("parkingMode"),
   autoAiGroupSchedule: document.getElementById("autoAiGroupSchedule"),
-  status: document.getElementById("status"),
-  embeddingsCard: document.getElementById("embeddingsCard")
+  status: document.getElementById("status")
 };
 
 function setStatus(message, kind = "") {
@@ -22,9 +19,9 @@ function setStatus(message, kind = "") {
   els.status.className = `status ${kind}`.trim();
 }
 
-function sendMessage(action, payload = {}) {
+function sendMessage(type, payload = {}) {
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ action, ...payload }, (response) => {
+    chrome.runtime.sendMessage({ type, ...payload }, (response) => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
         return;
@@ -45,57 +42,33 @@ function parseExcludedDomains(text) {
     .filter(Boolean);
 }
 
-function updateThresholdLabels() {
-  els.localThresholdValue.textContent = Number(els.localThreshold.value).toFixed(2);
-  els.embeddingsThresholdValue.textContent = Number(els.embeddingsThreshold.value).toFixed(2);
-}
-
-function updateEmbeddingsVisibility() {
-  const mode = els.similarityMode.value;
-  els.embeddingsCard.style.opacity = mode === "embeddings" ? "1" : "0.65";
-}
-
-function isValidEndpoint(url) {
-  if (!url) {
-    return true;
-  }
-
-  try {
-    const parsed = new URL(url);
-    const local = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
-    return parsed.protocol === "https:" || local;
-  } catch (_err) {
-    return false;
-  }
+function renderThreshold() {
+  els.similarityThresholdValue.textContent = Number(els.similarityThreshold.value).toFixed(2);
 }
 
 function renderSettings(settings) {
-  els.similarityMode.value = settings.similarityMode || "local";
+  els.aiGroupingEnabled.checked = Boolean(settings.aiGroupingEnabled);
+  els.similarityThreshold.value = settings.similarityThreshold ?? 0.82;
   els.includeSnippet.checked = Boolean(settings.includeSnippet);
+  els.openaiApiKey.value = settings.openaiApiKey || "";
+  els.embeddingsModel.value = settings.embeddingsModel || "text-embedding-3-small";
   els.aiLabeling.checked = Boolean(settings.aiLabeling);
-  els.localThreshold.value = settings.localThreshold ?? 0.35;
-  els.embeddingsThreshold.value = settings.embeddingsThreshold ?? 0.82;
-  els.embeddingsEndpoint.value = settings.embeddingsEndpoint || "";
-  els.embeddingsApiKey.value = settings.embeddingsApiKey || "";
   els.excludedDomains.value = (settings.excludedDomains || []).join("\n");
   els.includePinned.checked = Boolean(settings.includePinned);
   els.includeAudible.checked = Boolean(settings.includeAudible);
   els.parkingMode.value = settings.parkingMode || "append";
   els.autoAiGroupSchedule.value = settings.autoAiGroupSchedule || "off";
-
-  updateThresholdLabels();
-  updateEmbeddingsVisibility();
+  renderThreshold();
 }
 
 function collectSettings() {
   return {
-    similarityMode: els.similarityMode.value,
+    aiGroupingEnabled: els.aiGroupingEnabled.checked,
+    similarityThreshold: Number(els.similarityThreshold.value),
     includeSnippet: els.includeSnippet.checked,
+    openaiApiKey: els.openaiApiKey.value.trim(),
+    embeddingsModel: els.embeddingsModel.value,
     aiLabeling: els.aiLabeling.checked,
-    localThreshold: Number(els.localThreshold.value),
-    embeddingsThreshold: Number(els.embeddingsThreshold.value),
-    embeddingsEndpoint: els.embeddingsEndpoint.value.trim(),
-    embeddingsApiKey: els.embeddingsApiKey.value,
     excludedDomains: parseExcludedDomains(els.excludedDomains.value),
     includePinned: els.includePinned.checked,
     includeAudible: els.includeAudible.checked,
@@ -110,22 +83,10 @@ async function loadSettings() {
 }
 
 async function onSave() {
-  const settings = collectSettings();
-
-  if (settings.similarityMode === "embeddings") {
-    if (!settings.embeddingsEndpoint) {
-      setStatus("Embeddings endpoint is required when embeddings mode is selected.", "error");
-      return;
-    }
-    if (!isValidEndpoint(settings.embeddingsEndpoint)) {
-      setStatus("Embeddings endpoint must be https:// unless using localhost.", "error");
-      return;
-    }
-  }
-
   try {
-    const { settings: saved } = await sendMessage("SAVE_SETTINGS", { settings });
-    renderSettings(saved);
+    const settings = collectSettings();
+    const response = await sendMessage("SAVE_SETTINGS", { settings });
+    renderSettings(response.settings);
     setStatus("Settings saved.", "success");
   } catch (err) {
     setStatus(err.message, "error");
@@ -146,9 +107,7 @@ async function onClearSessions() {
   }
 }
 
-els.localThreshold.addEventListener("input", updateThresholdLabels);
-els.embeddingsThreshold.addEventListener("input", updateThresholdLabels);
-els.similarityMode.addEventListener("change", updateEmbeddingsVisibility);
+els.similarityThreshold.addEventListener("input", renderThreshold);
 document.getElementById("saveBtn").addEventListener("click", onSave);
 document.getElementById("clearSessionsBtn").addEventListener("click", onClearSessions);
 
