@@ -5,14 +5,14 @@
 
 body {
   margin: 0;
-  background: #f4f6fa;
-  color: #1b2538;
+  background: #f4f6fb;
+  color: #1a2438;
 }
 
 .container {
-  max-width: 760px;
+  max-width: 840px;
   margin: 0 auto;
-  padding: 20px 16px 28px;
+  padding: 18px 16px 28px;
   display: grid;
   gap: 14px;
 }
@@ -23,13 +23,13 @@ h1 {
 }
 
 h2 {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   font-size: 18px;
 }
 
 .card {
   background: #fff;
-  border: 1px solid #d6dceb;
+  border: 1px solid #d6deee;
   border-radius: 10px;
   padding: 14px;
   display: grid;
@@ -39,22 +39,24 @@ h2 {
 label {
   font-size: 14px;
   font-weight: 600;
-  color: #33425f;
+  color: #334662;
 }
 
+input,
 textarea,
 select,
 button {
-  border: 1px solid #c5cde0;
+  border: 1px solid #c4cee2;
   border-radius: 8px;
   font-size: 14px;
   padding: 9px 10px;
 }
 
+input,
 textarea,
 select {
   background: #fff;
-  color: #1b2538;
+  color: #1a2438;
 }
 
 .toggle {
@@ -69,6 +71,16 @@ select {
   height: 16px;
 }
 
+.note {
+  margin: 0;
+  font-size: 13px;
+  color: #4b5d7d;
+}
+
+.note.warning {
+  color: #9a2b2b;
+}
+
 .actions {
   display: flex;
   gap: 10px;
@@ -81,20 +93,20 @@ button {
 }
 
 button.primary {
-  background: #1f6feb;
-  border-color: #1f6feb;
+  background: #145ad1;
+  border-color: #145ad1;
   color: #fff;
 }
 
 button.danger {
-  background: #fff2f3;
-  border-color: #e28a93;
-  color: #93212d;
+  background: #fff2f2;
+  border-color: #e19191;
+  color: #992626;
 }
 
 .status {
-  min-height: 20px;
   margin: 0;
+  min-height: 20px;
   font-size: 14px;
 }
 
@@ -103,5 +115,5 @@ button.danger {
 }
 
 .status.error {
-  color: #af1f2d;
+  color: #b3202f;
 }

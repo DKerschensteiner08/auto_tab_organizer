@@ -1,24 +1,38 @@
 {
   "manifest_version": 3,
-  "name": "Smart Tab Tidy",
-  "description": "Organize tabs by domain, park sessions, restore sets, and close duplicates.",
-  "version": "1.0.0",
+  "name": "Smart Tab Tidy (AI)",
+  "description": "Organize tabs by domain and semantic similarity, park sessions, restore tabs, and close duplicates.",
+  "version": "2.0.0",
   "permissions": [
     "tabs",
     "tabGroups",
     "storage",
-    "alarms"
+    "alarms",
+    "commands",
+    "offscreen",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
   ],
   "background": {
     "service_worker": "service_worker.js",
     "type": "module"
   },
   "action": {
-    "default_title": "Smart Tab Tidy",
+    "default_title": "Smart Tab Tidy (AI)",
     "default_popup": "popup.html"
   },
   "options_page": "options.html",
   "commands": {
+    "ai-group-similar-tabs": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "AI Group Similar Tabs"
+    },
     "group-by-domain": {
       "suggested_key": {
         "default": "Ctrl+Shift+G",

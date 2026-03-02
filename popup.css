@@ -5,9 +5,9 @@
 
 body {
   margin: 0;
-  min-width: 320px;
-  background: #f5f7fa;
-  color: #1d2433;
+  min-width: 330px;
+  background: #f5f7fb;
+  color: #1a2438;
 }
 
 .popup {
@@ -24,12 +24,12 @@ h1 {
 
 button,
 select {
+  border: 1px solid #c9d1e2;
   border-radius: 8px;
-  border: 1px solid #ccd3e0;
-  font-size: 13px;
-  padding: 9px 10px;
   background: #fff;
-  color: #1d2433;
+  color: #1a2438;
+  padding: 9px 10px;
+  font-size: 13px;
 }
 
 button {
@@ -38,37 +38,38 @@ button {
 }
 
 button:hover {
-  border-color: #9ba8bd;
+  border-color: #9aa8c3;
 }
 
 button.primary {
-  background: #1f6feb;
-  border-color: #1f6feb;
+  background: #145ad1;
+  border-color: #145ad1;
   color: #fff;
 }
 
 button.secondary {
-  background: #eef2f7;
+  background: #eef2f8;
 }
 
 .restore-block {
   display: grid;
   gap: 6px;
-  padding: 8px;
-  border: 1px solid #d7dce8;
+  border: 1px solid #d8deeb;
   border-radius: 8px;
-  background: #ffffff;
+  background: #fff;
+  padding: 8px;
 }
 
 label {
   font-size: 12px;
-  color: #4f5d75;
+  color: #465874;
 }
 
 .status {
+  min-height: 24px;
   margin: 2px 0 0;
-  min-height: 18px;
   font-size: 12px;
+  white-space: pre-wrap;
 }
 
 .status.success {
@@ -76,5 +77,5 @@ label {
 }
 
 .status.error {
-  color: #af1f2d;
+  color: #b3202f;
 }
