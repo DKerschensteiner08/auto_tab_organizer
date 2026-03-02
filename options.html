@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Tab Tidy - Options</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Smart Tab Tidy Settings</h1>
+
+      <section class="card">
+        <h2>Grouping Rules</h2>
+        <label for="excludedDomains">Excluded domains (one per line)</label>
+        <textarea id="excludedDomains" rows="8" placeholder="example.com\nmail.example.com"></textarea>
+      </section>
+
+      <section class="card">
+        <h2>Behavior</h2>
+        <label class="toggle">
+          <input id="includePinned" type="checkbox" />
+          <span>Include pinned tabs</span>
+        </label>
+
+        <label class="toggle">
+          <input id="includeAudible" type="checkbox" />
+          <span>Include audible tabs when parking</span>
+        </label>
+
+        <label for="parkingMode">Parking behavior</label>
+        <select id="parkingMode">
+          <option value="append">Create a new Parking Lot each time</option>
+          <option value="replace">Reuse one Parking Lot (overwrite)</option>
+        </select>
+      </section>
+
+      <section class="card">
+        <h2>Automation</h2>
+        <label for="autoTidySchedule">Auto-group schedule</label>
+        <select id="autoTidySchedule">
+          <option value="off">Off</option>
+          <option value="30m">Every 30 min</option>
+          <option value="2h">Every 2 hours</option>
+          <option value="daily">Daily</option>
+        </select>
+      </section>
+
+      <section class="actions">
+        <button id="saveBtn" class="primary">Save Settings</button>
+        <button id="clearSessionsBtn" class="danger">Clear saved sessions</button>
+      </section>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>

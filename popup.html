@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Tab Tidy</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <h1>Smart Tab Tidy</h1>
+
+      <button id="groupByDomainBtn" class="primary">Group by Domain</button>
+      <button id="parkTabsBtn">Park Tabs</button>
+
+      <section class="restore-block">
+        <label for="sessionsSelect">Restore session</label>
+        <select id="sessionsSelect"></select>
+
+        <label for="restoreTarget">Restore target</label>
+        <select id="restoreTarget">
+          <option value="new">New window</option>
+          <option value="current">Current window</option>
+        </select>
+
+        <button id="restoreBtn">Restore...</button>
+      </section>
+
+      <button id="closeDuplicatesBtn">Close Duplicates</button>
+      <button id="openOptionsBtn" class="secondary">Options</button>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

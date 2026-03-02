@@ -1,0 +1,107 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f4f6fa;
+  color: #1b2538;
+}
+
+.container {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 20px 16px 28px;
+  display: grid;
+  gap: 14px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #d6dceb;
+  border-radius: 10px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #33425f;
+}
+
+textarea,
+select,
+button {
+  border: 1px solid #c5cde0;
+  border-radius: 8px;
+  font-size: 14px;
+  padding: 9px 10px;
+}
+
+textarea,
+select {
+  background: #fff;
+  color: #1b2538;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+
+.toggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+button {
+  cursor: pointer;
+  font-weight: 700;
+  background: #f8fbff;
+}
+
+button.primary {
+  background: #1f6feb;
+  border-color: #1f6feb;
+  color: #fff;
+}
+
+button.danger {
+  background: #fff2f3;
+  border-color: #e28a93;
+  color: #93212d;
+}
+
+.status {
+  min-height: 20px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.status.success {
+  color: #0f7a2f;
+}
+
+.status.error {
+  color: #af1f2d;
+}

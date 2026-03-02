@@ -1,0 +1,80 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #f5f7fa;
+  color: #1d2433;
+}
+
+.popup {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+button,
+select {
+  border-radius: 8px;
+  border: 1px solid #ccd3e0;
+  font-size: 13px;
+  padding: 9px 10px;
+  background: #fff;
+  color: #1d2433;
+}
+
+button {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:hover {
+  border-color: #9ba8bd;
+}
+
+button.primary {
+  background: #1f6feb;
+  border-color: #1f6feb;
+  color: #fff;
+}
+
+button.secondary {
+  background: #eef2f7;
+}
+
+.restore-block {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #d7dce8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+label {
+  font-size: 12px;
+  color: #4f5d75;
+}
+
+.status {
+  margin: 2px 0 0;
+  min-height: 18px;
+  font-size: 12px;
+}
+
+.status.success {
+  color: #0f7a2f;
+}
+
+.status.error {
+  color: #af1f2d;
+}
