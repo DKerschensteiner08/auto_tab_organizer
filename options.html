@@ -3,87 +3,130 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Smart Tab Tidy (OpenAI AI) - Options</title>
+    <title>Smart Tab Tidy — Settings</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
     <main class="container">
-      <h1>Smart Tab Tidy (OpenAI AI) Settings</h1>
+      <header class="header">
+        <h1>Smart Tab Tidy</h1>
+        <p class="lead">Group, sort, park, and tidy your browser tabs.</p>
+      </header>
 
       <section class="card">
-        <h2>AI Grouping</h2>
+        <header class="card-header">
+          <div>
+            <h2>AI Grouping</h2>
+            <p class="hint">Cluster open tabs by topic with OpenAI embeddings. Tab titles and (optionally) page snippets are sent to OpenAI.</p>
+          </div>
+          <label class="switch" title="Enable AI grouping">
+            <input id="aiGroupingEnabled" type="checkbox" />
+            <span class="track" aria-hidden="true"></span>
+          </label>
+        </header>
 
-        <label class="toggle">
-          <input id="aiGroupingEnabled" type="checkbox" />
-          <span>Enable AI grouping</span>
-        </label>
+        <div class="field">
+          <label for="openaiApiKey">OpenAI API key</label>
+          <input id="openaiApiKey" type="password" placeholder="sk-..." autocomplete="off" />
+          <p class="hint">Stored locally in your browser. Required for AI grouping.</p>
+        </div>
 
-        <label for="similarityThreshold">Similarity threshold: <span id="similarityThresholdValue">0.82</span></label>
-        <input id="similarityThreshold" type="range" min="0.50" max="0.98" step="0.01" />
+        <div class="grid two">
+          <div class="field">
+            <label for="embeddingsModel">Embeddings model</label>
+            <select id="embeddingsModel">
+              <option value="text-embedding-3-small">text-embedding-3-small</option>
+              <option value="text-embedding-3-large">text-embedding-3-large</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="similarityThreshold">
+              Similarity threshold
+              <span id="similarityThresholdValue" class="muted">0.82</span>
+            </label>
+            <input id="similarityThreshold" type="range" min="0.50" max="0.98" step="0.01" />
+            <p class="hint">Higher values create tighter, more conservative groups.</p>
+          </div>
+        </div>
 
-        <label class="toggle">
+        <label class="checkbox">
           <input id="includeSnippet" type="checkbox" />
-          <span>Include snippet text (max 800 chars)</span>
+          <span>Use page snippet text (up to 800 chars) for better grouping</span>
         </label>
 
-        <label for="openaiApiKey">OpenAI API key</label>
-        <input id="openaiApiKey" type="password" placeholder="sk-..." autocomplete="off" />
-
-        <label for="embeddingsModel">Embeddings model</label>
-        <select id="embeddingsModel">
-          <option value="text-embedding-3-small">text-embedding-3-small</option>
-          <option value="text-embedding-3-large">text-embedding-3-large</option>
-        </select>
-
-        <label class="toggle">
+        <label class="checkbox">
           <input id="aiLabeling" type="checkbox" />
-          <span>Optional AI labeling (Responses API)</span>
+          <span>Generate group labels with AI (Responses API, gpt-4.1-mini)</span>
         </label>
-
-        <p class="note">Tab titles and selected snippet text may be sent to OpenAI when AI grouping is used.</p>
       </section>
 
       <section class="card">
-        <h2>Rules & Behavior</h2>
+        <h2>Behavior</h2>
 
-        <label for="excludedDomains">Excluded domains (one per line)</label>
-        <textarea id="excludedDomains" rows="7" placeholder="example.com\nmail.example.com"></textarea>
+        <div class="grid two">
+          <div class="field">
+            <label for="parkingMode">Parking mode</label>
+            <select id="parkingMode">
+              <option value="append">Save a new session each time</option>
+              <option value="replace">Reuse a single Parking Lot session</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="defaultRestoreTarget">Default restore target</label>
+            <select id="defaultRestoreTarget">
+              <option value="new">New window</option>
+              <option value="current">Current window</option>
+            </select>
+          </div>
+        </div>
 
-        <label class="toggle">
+        <div class="field">
+          <label for="excludedDomains">Excluded domains</label>
+          <textarea id="excludedDomains" rows="6" placeholder="example.com&#10;mail.example.com"></textarea>
+          <p class="hint">One domain per line. Subdomains are also excluded.</p>
+        </div>
+
+        <label class="checkbox">
           <input id="includePinned" type="checkbox" />
           <span>Include pinned tabs in grouping</span>
         </label>
 
-        <label class="toggle">
+        <label class="checkbox">
           <input id="includeAudible" type="checkbox" />
-          <span>Include audible tabs in parking</span>
+          <span>Allow parking audible tabs</span>
         </label>
-
-        <label for="parkingMode">Parking behavior</label>
-        <select id="parkingMode">
-          <option value="append">Create a new Parking Lot each time</option>
-          <option value="replace">Reuse one Parking Lot (overwrite)</option>
-        </select>
       </section>
 
       <section class="card">
         <h2>Automation</h2>
-
-        <label for="autoAiGroupSchedule">Auto AI-group schedule</label>
-        <select id="autoAiGroupSchedule">
-          <option value="off">Off</option>
-          <option value="30m">Every 30 min</option>
-          <option value="2h">Every 2 hours</option>
-          <option value="daily">Daily</option>
-        </select>
+        <div class="field">
+          <label for="autoAiGroupSchedule">Auto AI-group schedule</label>
+          <select id="autoAiGroupSchedule">
+            <option value="off">Off</option>
+            <option value="30m">Every 30 minutes</option>
+            <option value="2h">Every 2 hours</option>
+            <option value="daily">Daily</option>
+          </select>
+          <p class="hint">Runs the AI grouping action automatically when the active tab is not on an excluded domain.</p>
+        </div>
       </section>
 
-      <section class="actions">
-        <button id="saveBtn" class="primary">Save Settings</button>
-        <button id="clearSessionsBtn" class="danger">Clear saved sessions</button>
+      <section class="card">
+        <h2>Keyboard shortcuts</h2>
+        <ul class="shortcuts">
+          <li><kbd>Ctrl/⌘ Shift S</kbd> AI Group Similar Tabs</li>
+          <li><kbd>Ctrl/⌘ Shift G</kbd> Group by Domain</li>
+          <li><kbd>Ctrl/⌘ Shift P</kbd> Park Tabs</li>
+          <li><kbd>Ctrl/⌘ Shift D</kbd> Close Duplicates</li>
+        </ul>
+        <p class="hint">Customize in <code>chrome://extensions/shortcuts</code>.</p>
       </section>
 
-      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <footer class="actions">
+        <button id="saveBtn" class="btn primary" type="button">Save settings</button>
+        <button id="clearSessionsBtn" class="btn danger" type="button">Clear all sessions</button>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </footer>
     </main>
 
     <script src="options.js"></script>

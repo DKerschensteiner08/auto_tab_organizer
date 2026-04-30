@@ -3,35 +3,103 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Smart Tab Tidy (OpenAI AI)</title>
+    <title>Smart Tab Tidy</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <main class="popup">
-      <h1>Smart Tab Tidy (OpenAI AI)</h1>
+    <header class="topbar">
+      <div class="brand">
+        <svg class="brand-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="4" rx="1.5" fill="currentColor" opacity="0.55" />
+          <rect x="3" y="10" width="13" height="4" rx="1.5" fill="currentColor" opacity="0.8" />
+          <rect x="3" y="16" width="8" height="4" rx="1.5" fill="currentColor" />
+        </svg>
+        <span class="brand-name">Smart Tab Tidy</span>
+      </div>
+      <button id="openOptionsBtn" class="icon-btn" type="button" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8" fill="none" />
+          <path d="M19.4 15a8 8 0 0 0 .1-3l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2.6-1.5L14 4h-4l-.5 2.6a8 8 0 0 0-2.6 1.5l-2.4-1-2 3.4 2 1.5a8 8 0 0 0 .1 3l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2.6 1.5L10 22h4l.5-2.6a8 8 0 0 0 2.6-1.5l2.4 1 2-3.4-2.1-1.5z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round" />
+        </svg>
+      </button>
+    </header>
 
-      <button id="aiGroupBtn" class="primary">AI Group Similar Tabs</button>
-      <button id="groupByDomainBtn">Group by Domain</button>
-      <button id="parkTabsBtn">Park Tabs</button>
+    <section class="stats" aria-label="Tab statistics">
+      <div class="stat">
+        <span class="stat-value" id="statTabs">–</span>
+        <span class="stat-label">Tabs</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="statGroups">–</span>
+        <span class="stat-label">Groups</span>
+      </div>
+      <div class="stat" id="statDuplicatesCard">
+        <span class="stat-value" id="statDuplicates">–</span>
+        <span class="stat-label">Duplicates</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="statSessions">–</span>
+        <span class="stat-label">Sessions</span>
+      </div>
+    </section>
 
-      <section class="restore">
-        <label for="sessionsSelect">Restore session</label>
-        <select id="sessionsSelect"></select>
+    <section class="group">
+      <h2 class="section-title">Organize</h2>
+      <button id="aiGroupBtn" class="btn primary" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.6 4.2 4.2 1.6-4.2 1.6L12 14.6l-1.6-4.2L6.2 8.8 10.4 7.2 12 3z" fill="currentColor"/><path d="M18.5 14l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" fill="currentColor" opacity="0.7"/></svg>
+        <span>AI Group Similar Tabs</span>
+      </button>
+      <button id="groupByDomainBtn" class="btn" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M3 12h18 M12 3a14 14 0 0 1 0 18 M12 3a14 14 0 0 0 0 18" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>
+        <span>Group by Domain</span>
+      </button>
+      <div class="row two">
+        <button id="sortByDomainBtn" class="btn" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v15M3 7l3-3 3 3 M14 5h6 M14 10h5 M14 15h4 M14 20h3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Sort by Domain</span>
+        </button>
+        <button id="ungroupAllBtn" class="btn" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="7" height="14" rx="1.5" stroke="currentColor" stroke-width="1.8" fill="none"/><rect x="14" y="5" width="7" height="14" rx="1.5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-dasharray="3 2"/></svg>
+          <span>Ungroup All</span>
+        </button>
+      </div>
+    </section>
 
-        <label for="restoreTarget">Restore target</label>
-        <select id="restoreTarget">
-          <option value="new">New window</option>
-          <option value="current">Current window</option>
-        </select>
+    <section class="group">
+      <h2 class="section-title">Cleanup</h2>
+      <button id="closeDuplicatesBtn" class="btn" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 9V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-3 M3 9h12a2 2 0 0 1 2 2v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg>
+        <span id="closeDuplicatesLabel">Close Duplicates</span>
+      </button>
+    </section>
 
-        <button id="restoreBtn">Restore...</button>
-      </section>
+    <section class="group">
+      <h2 class="section-title">Sessions</h2>
+      <button id="parkTabsBtn" class="btn" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg>
+        <span>Park Tabs</span>
+      </button>
+      <div id="sessionsList" class="sessions-list" aria-live="polite"></div>
+    </section>
 
-      <button id="closeDuplicatesBtn">Close Duplicates</button>
-      <button id="openOptionsBtn" class="secondary">Options</button>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
 
-      <p id="status" class="status" role="status" aria-live="polite"></p>
-    </main>
+    <template id="sessionRowTemplate">
+      <div class="session-row">
+        <div class="session-info">
+          <span class="session-name"></span>
+          <span class="session-meta"></span>
+        </div>
+        <div class="session-actions">
+          <button class="icon-btn restore" type="button" title="Restore session" aria-label="Restore session">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3h7v7 M21 3l-9 9 M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="icon-btn delete" type="button" title="Delete session" aria-label="Delete session">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16 M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3 M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+    </template>
 
     <script src="popup.js"></script>
   </body>

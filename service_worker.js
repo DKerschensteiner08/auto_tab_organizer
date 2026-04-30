@@ -7,6 +7,7 @@ const MAX_SESSIONS = 100;
 const GROUP_COLORS = ["grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange"];
 const TRACKING_PARAM_EXACT = new Set(["fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid"]);
 const OPTIONAL_SNIPPET_ORIGINS = ["http://*/*", "https://*/*"];
+const TAB_GROUP_ID_NONE = (typeof chrome !== "undefined" && chrome.tabGroups?.TAB_GROUP_ID_NONE) ?? -1;
 
 const DEFAULT_SETTINGS = {
   excludedDomains: [],
@@ -83,6 +84,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return;
       case "AI_GROUP_OPENAI":
         sendResponse({ ok: true, result: await aiGroupSimilarTabs({ source: "popup" }) });
+        return;
+      case "GET_STATS":
+        sendResponse({ ok: true, result: await getStats() });
+        return;
+      case "UNGROUP_ALL":
+        sendResponse({ ok: true, result: await ungroupAll() });
+        return;
+      case "SORT_TABS_BY_DOMAIN":
+        sendResponse({ ok: true, result: await sortTabsByDomain() });
+        return;
+      case "DELETE_SESSION":
+        sendResponse({ ok: true, result: await deleteSession(message.sessionId) });
         return;
       case "GET_SETTINGS":
         sendResponse({ ok: true, result: { settings: await loadSettings() } });
@@ -338,6 +351,42 @@ function tabsGroup(groupOptions) {
   });
 }
 
+function tabsUngroup(tabIds) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.ungroup(tabIds, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function tabsMove(tabIds, props) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.move(tabIds, props, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function tabGroupsQuery(queryInfo) {
+  return new Promise((resolve, reject) => {
+    chrome.tabGroups.query(queryInfo, (groups) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(groups || []);
+    });
+  });
+}
+
 function tabGroupsUpdate(groupId, updateProps) {
   return new Promise((resolve, reject) => {
     chrome.tabGroups.update(groupId, updateProps, (group) => {
@@ -588,7 +637,7 @@ async function parkTabs() {
   };
 }
 
-async function restoreSession(sessionId, target = "new") {
+async function restoreSession(sessionId, target) {
   const sessions = await loadSessions();
   const session = sessions.find((item) => item.id === sessionId);
   if (!session) {
@@ -600,7 +649,13 @@ async function restoreSession(sessionId, target = "new") {
     throw new Error("Session has no restorable tab URLs.");
   }
 
-  if (target === "new") {
+  let resolvedTarget = target;
+  if (!["new", "current"].includes(resolvedTarget)) {
+    const settings = await loadSettings();
+    resolvedTarget = settings.defaultRestoreTarget;
+  }
+
+  if (resolvedTarget === "new") {
     const createdWindow = await windowsCreate({ url: urls[0] });
     const windowId = createdWindow.id;
     for (let i = 1; i < urls.length; i += 1) {
@@ -681,6 +736,116 @@ async function closeDuplicates() {
 async function clearSessions() {
   await saveSessions([]);
   return { cleared: true };
+}
+
+async function deleteSession(sessionId) {
+  if (!sessionId) {
+    throw new Error("Missing session id.");
+  }
+  const sessions = await loadSessions();
+  const filtered = sessions.filter((s) => s.id !== sessionId);
+  if (filtered.length === sessions.length) {
+    throw new Error("Session not found.");
+  }
+  await saveSessions(filtered);
+  return { deleted: true };
+}
+
+function isUngroupedTab(tab) {
+  if (typeof tab.groupId !== "number") {
+    return true;
+  }
+  return tab.groupId === TAB_GROUP_ID_NONE || tab.groupId === -1;
+}
+
+async function ungroupAll() {
+  const tabs = await tabsQuery({ currentWindow: true });
+  const ids = tabs.filter((t) => t.id && !isUngroupedTab(t)).map((t) => t.id);
+  if (!ids.length) {
+    return { ungroupedCount: 0 };
+  }
+  await tabsUngroup(ids);
+  return { ungroupedCount: ids.length };
+}
+
+async function sortTabsByDomain() {
+  const tabs = await tabsQuery({ currentWindow: true });
+  const candidates = tabs.filter(
+    (t) => t.id && t.url && !t.pinned && isUngroupedTab(t)
+  );
+  if (candidates.length < 2) {
+    return { movedCount: 0 };
+  }
+
+  const sorted = candidates.slice().sort((a, b) => {
+    const da = (getDomain(a.url) || a.url || "").toLowerCase();
+    const db = (getDomain(b.url) || b.url || "").toLowerCase();
+    if (da < db) return -1;
+    if (da > db) return 1;
+    return (a.title || "").localeCompare(b.title || "");
+  });
+
+  const ids = sorted.map((t) => t.id);
+  const alreadySorted = candidates.every((tab, i) => tab.id === ids[i]);
+  if (alreadySorted) {
+    return { movedCount: 0 };
+  }
+
+  await tabsMove(ids, { index: -1 });
+  return { movedCount: ids.length };
+}
+
+async function findDuplicateStats() {
+  const tabs = await tabsQuery({ currentWindow: true });
+  const groups = new Map();
+
+  for (const tab of tabs) {
+    if (!tab.id || !tab.url) {
+      continue;
+    }
+    const normalized = normalizeUrlForDuplicates(tab.url);
+    if (!normalized) {
+      continue;
+    }
+    if (!groups.has(normalized)) {
+      groups.set(normalized, []);
+    }
+    groups.get(normalized).push(tab);
+  }
+
+  let duplicateSets = 0;
+  let duplicateExtras = 0;
+  for (const same of groups.values()) {
+    if (same.length < 2) {
+      continue;
+    }
+    duplicateSets += 1;
+    duplicateExtras += same.length - 1;
+  }
+
+  return { duplicateSets, duplicateExtras };
+}
+
+async function getStats() {
+  const tabs = await tabsQuery({ currentWindow: true });
+  let groupCount = 0;
+  if (tabs.length && chrome.tabGroups?.query) {
+    const windowId = tabs[0].windowId;
+    if (windowId != null) {
+      const groups = await tabGroupsQuery({ windowId });
+      groupCount = groups.length;
+    }
+  }
+  const { duplicateSets, duplicateExtras } = await findDuplicateStats();
+  const sessions = await loadSessions();
+
+  return {
+    tabCount: tabs.length,
+    groupCount,
+    duplicateSets,
+    duplicateExtras,
+    sessionCount: sessions.length
+  };
 }
 
 async function hasOffscreenDocument() {

@@ -10,6 +10,7 @@ const els = {
   includePinned: document.getElementById("includePinned"),
   includeAudible: document.getElementById("includeAudible"),
   parkingMode: document.getElementById("parkingMode"),
+  defaultRestoreTarget: document.getElementById("defaultRestoreTarget"),
   autoAiGroupSchedule: document.getElementById("autoAiGroupSchedule"),
   status: document.getElementById("status")
 };
@@ -57,6 +58,7 @@ function renderSettings(settings) {
   els.includePinned.checked = Boolean(settings.includePinned);
   els.includeAudible.checked = Boolean(settings.includeAudible);
   els.parkingMode.value = settings.parkingMode || "append";
+  els.defaultRestoreTarget.value = settings.defaultRestoreTarget || "new";
   els.autoAiGroupSchedule.value = settings.autoAiGroupSchedule || "off";
   renderThreshold();
 }
@@ -73,6 +75,7 @@ function collectSettings() {
     includePinned: els.includePinned.checked,
     includeAudible: els.includeAudible.checked,
     parkingMode: els.parkingMode.value,
+    defaultRestoreTarget: els.defaultRestoreTarget.value,
     autoAiGroupSchedule: els.autoAiGroupSchedule.value
   };
 }
@@ -114,7 +117,7 @@ document.getElementById("clearSessionsBtn").addEventListener("click", onClearSes
 (async () => {
   try {
     await loadSettings();
-    setStatus("Ready.");
+    setStatus("");
   } catch (err) {
     setStatus(err.message, "error");
   }
